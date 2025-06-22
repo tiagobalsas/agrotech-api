@@ -9,25 +9,46 @@ export const setWebSocketNotifier = (notifier: (data: any) => void) => {
 
 export const fetchKpIndex = async (prisma: PrismaClient) => {
   const url = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json";
-  const { data } = await axios.get(url );
-  const latestKp = data[data.length - 1]; // Pega o registro mais recente
-  const [timestamp, kpValue] = latestKp;
+  const { data } = await axios.get(url);
+  
+  // O frontend espera um array de objetos com 'time' e 'kp'
+  const formattedData = data.map((entry: any) => ({
+    time: new Date(entry[0]),
+    kp: parseFloat(entry[1])
+  }));
 
-  const newKpEntry = await prisma.kpIndex.create({
-    data: {
-      timestamp: new Date(timestamp),
-      value: parseFloat(kpValue),
-      source: "NOAA",
-      type: "Kp"
-    },
+  const latestKp = formattedData[formattedData.length - 1]; // Pega o registro mais recente já formatado
+
+  // Verifica se já existe um registro para o mesmo timestamp e tipo
+  const existingKpEntry = await prisma.kpIndex.findUnique({
+    where: {
+      timestamp_type: { // Assuming you have a unique constraint on timestamp and type in your schema.prisma
+        timestamp: latestKp.time,
+        type: "Kp"
+      }
+    }
   });
+
+  let newOrExistingKpEntry;
+  if (!existingKpEntry) {
+    newOrExistingKpEntry = await prisma.kpIndex.create({
+      data: {
+        timestamp: latestKp.time,
+        value: latestKp.kp,
+        source: "NOAA",
+        type: "Kp"
+      },
+    });
+  } else {
+    newOrExistingKpEntry = existingKpEntry;
+  }
 
   // Notifica os clientes WebSocket sobre o novo dado Kp
   if (wsNotifier) {
-    wsNotifier(newKpEntry);
+    wsNotifier(newOrExistingKpEntry);
   }
 
-  return { timestamp, kpValue };
+  return formattedData; // Retorna o array formatado
 };
 
 export const getLatestKpData = async (prisma: PrismaClient) => {

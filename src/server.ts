@@ -4,45 +4,41 @@ import { setWebSocketNotifier, fetchKpIndex, getLatestKpData } from './services/
 import droneAlertService from './services/drone-alert.service';
 import contactService from './services/contact.service';
 import { startKpIndexScheduler } from './tasks/kpIndexScheduler';
-import websocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
+import { Server } from 'socket.io'; // Importar Server do socket.io
 
 const app = fastify({ logger: true });
 const prisma = new PrismaClient();
 
-// Store active WebSocket connections
-const clients = new Set<any>();
+// Create a Socket.IO server instance and attach it to the Fastify's HTTP server
+const io = new Server(app.server, {
+  cors: {
+    origin: "*", // Permitir todas as origens para desenvolvimento
+    methods: ["GET", "POST"]
+  }
+});
 
-// Register WebSocket plugin
-app.register(websocket);
+// Set up the WebSocket notifier in noaaService to use Socket.IO
+setWebSocketNotifier((data: any) => {
+  io.emit('kp-update', data); // Emitir evento 'kp-update' para todos os clientes Socket.IO
+});
 
-// Register CORS plugin
+// Register CORS plugin for Fastify routes
 app.register(fastifyCors, {
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
-// Set up the WebSocket notifier in noaaService
-setWebSocketNotifier((data: any) => {
-  clients.forEach(client => {
-    if (client.readyState === client.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
-});
-
-// Rotas
+// Rotas Fastify
 app.get('/kp-index', async () => {
-  // Antes de criar um novo registro, verifique se já existe um para o mesmo timestamp e tipo
-  // Isso evita o erro de violação de chave única (P2002)
-  const latestData = await getLatestKpData(prisma);
-  if (latestData && latestData.timestamp.toDateString() === new Date().toDateString()) {
-    // Se já existe um registro para hoje, retorne-o ou decida como lidar
-    // Por simplicidade, vamos apenas retornar o último dado existente e não criar um novo
-    return latestData;
+  const latestEntry = await getLatestKpData(prisma);
+  if (latestEntry) {
+    return [[latestEntry.timestamp.toISOString(), latestEntry.value.toString()]];
+  } else {
+    const newKp = await fetchKpIndex(prisma);
+    return [[newKp.timestamp.toISOString(), newKp.kpValue.toString()]];
   }
-  return await fetchKpIndex(prisma);
 });
 
 app.get('/drone-alerts', async () => {
@@ -50,14 +46,11 @@ app.get('/drone-alerts', async () => {
 });
 
 app.post('/contact', async (request, reply) => {
-  console.log('Received contact form submission:', request.body); // Log de depuração
-  console.log('Content-Type:', request.headers['content-type']); // Novo log para Content-Type
   const { name, email, subject, message } = request.body as { name: string; email: string; subject: string; message: string; };
   try {
     const newContact = await contactService.submitContactForm(prisma, { name, email, subject, message });
     reply.code(201).send(newContact);
-  } catch (error: unknown) { // Explicitly type error as unknown
-    console.error('Error processing contact form:', error); // This line might cause the 'unknown' error
+  } catch (error: unknown) {
     let errorMessage = 'Ocorreu um erro desconhecido ao processar o formulário de contato.';
     if (error instanceof Error) {
       errorMessage = error.message;
@@ -70,32 +63,25 @@ app.get('/contact/subjects', async () => {
   return await contactService.getContactSubjects(prisma);
 });
 
-// WebSocket route for Kp Index updates
-app.get('/ws/kp-index', { websocket: true }, (connection, req) => {
-  clients.add(connection);
-  console.log('WebSocket client connected to /ws/kp-index. Total clients:', clients.size);
-
-  connection.on('message', (message: string) => {
-    console.log(`Received WebSocket message: ${message}`);
-  });
+// Socket.IO connection handling
+io.on('connection', (socket) => {
 
   // Send initial Kp data when a client connects
   getLatestKpData(prisma).then(data => {
     if (data) {
-      connection.send(JSON.stringify(data));
+      socket.emit('kp-update', data); // Enviar dados iniciais para o cliente conectado
     }
   });
 
-  connection.on('close', () => {
-    clients.delete(connection);
-    console.log('WebSocket client disconnected from /ws/kp-index. Total clients:', clients.size);
+  socket.on('disconnect', () => {
   });
 });
 
 const start = async () => {
   try {
-    await app.listen({ port: 3001, host: '0.0.0.0' }); // Changed port to 3001
-    console.log('Server running on http://localhost:3001');
+    // Start the Fastify app and attach the HTTP server
+    await app.listen({ port: 3001, host: '0.0.0.0' });
+
     startKpIndexScheduler(); // Inicia o agendador de tarefas
   } catch (err) {
     app.log.error(err);

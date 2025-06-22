@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import noaaService from './services/noaa.service';
+import { fetchKpIndex } from './services/noaa.service'; // Importação nomeada
 import droneAlertService from './services/drone-alert.service';
 
 async function testServices() {
@@ -7,7 +7,7 @@ async function testServices() {
 
   try {
     console.log('Fetching Kp Index...');
-    const kpData = await noaaService.fetchKpIndex(prisma);
+    const kpData = await fetchKpIndex(prisma); // Usando a função importada diretamente
     console.log('Kp Index Data:', kpData);
 
     console.log('Checking Drone Alerts...');
@@ -21,4 +21,3 @@ async function testServices() {
 }
 
 testServices();
-
