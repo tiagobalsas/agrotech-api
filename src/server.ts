@@ -37,7 +37,11 @@ app.get('/kp-index', async () => {
     return [[latestEntry.timestamp.toISOString(), latestEntry.value.toString()]];
   } else {
     const newKp = await fetchKpIndex(prisma);
-    return [[newKp.timestamp.toISOString(), newKp.kpValue.toString()]];
+    if (newKp && newKp.length > 0) {
+      return [[newKp[newKp.length - 1].time.toISOString(), newKp[newKp.length - 1].kp.toString()]];
+    } else {
+      return [];
+    }
   }
 });
 

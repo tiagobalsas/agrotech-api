@@ -19,6 +19,11 @@ export const fetchKpIndex = async (prisma: PrismaClient) => {
 
   const latestKp = formattedData[formattedData.length - 1]; // Pega o registro mais recente já formatado
 
+  if (!latestKp) {
+    console.warn("No latest Kp data found after formatting.");
+    return []; // Retorna um array vazio ou lida com o erro de forma apropriada
+  }
+
   // Verifica se já existe um registro para o mesmo timestamp e tipo
   const existingKpEntry = await prisma.kpIndex.findUnique({
     where: {

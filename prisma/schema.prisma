@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,9 +12,9 @@ model KpIndex {
   id        String   @id @default(uuid())
   timestamp DateTime
   value     Float
-  source    String   // GFZ, NOAA, etc.
-  type      String   // Kp, Hp30, Hp60
-  
+  source    String // GFZ, NOAA, etc.
+  type      String // Kp, Hp30, Hp60
+
   @@unique([timestamp, type])
 }
 
@@ -34,4 +34,3 @@ model ContactSubject {
   id    String @id @default(uuid())
   title String @unique
 }
-
