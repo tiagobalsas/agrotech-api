@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: agrotech-backend
+    runtime: docker
+    env: production
+    port: 3001
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: calculadora-defensivos-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
