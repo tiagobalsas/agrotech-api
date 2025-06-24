@@ -3,7 +3,7 @@ services:
     build: .
     ports:
       - "3001:3001"
-      - "5555:5555" # Prisma Studio local
+      - "5555:5555"
     environment:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/calculadora_defensivos?schema=public
       - NODE_ENV=development
@@ -11,6 +11,8 @@ services:
     depends_on:
       - db
     command: sh -c "npx prisma migrate deploy && npm run start"
+    volumes:
+      - ./prisma:/app/prisma
 
   db:
     image: postgres:14
@@ -18,7 +20,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${DB_PASSWORD} # Usará sua senha complexa
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=calculadora_defensivos
     volumes:
       - postgres_data:/var/lib/postgresql/data
